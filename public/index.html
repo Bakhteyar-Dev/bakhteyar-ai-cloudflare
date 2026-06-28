@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bakhteyar AI</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    .page {
+      max-width: 850px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 34px;
+    }
+
+    .subtitle {
+      color: #475569;
+      margin-bottom: 24px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-top: 16px;
+      margin-bottom: 8px;
+    }
+
+    select,
+    textarea,
+    button {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+
+    select,
+    textarea {
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    textarea {
+      min-height: 160px;
+      resize: vertical;
+    }
+
+    button {
+      margin-top: 16px;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      color: white;
+      background: linear-gradient(135deg, #7c3aed, #2563eb);
+    }
+
+    button.secondary {
+      background: #0f172a;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 12px;
+      background: #f1f5f9;
+      white-space: pre-wrap;
+      line-height: 1.7;
+      font-size: 18px;
+    }
+
+    .rtl {
+      direction: rtl;
+      text-align: right;
+      font-size: 22px;
+    }
+
+    .error {
+      margin-top: 16px;
+      color: #b91c1c;
+      background: #fee2e2;
+      padding: 12px;
+      border-radius: 12px;
+      display: none;
+    }
+
+    audio {
+      width: 100%;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>Bakhteyar AI</h1>
+      <p class="subtitle">English to Balochi translation and Balochi speech generation.</p>
+
+      <label for="script">Script</label>
+      <select id="script">
+        <option value="arabic">Balochi Arabic</option>
+        <option value="latin">Balochi Latin</option>
+      </select>
+
+      <label for="inputText">English Text</label>
+      <textarea id="inputText" placeholder="Type English text here..."></textarea>
+
+      <button id="translateBtn">Translate</button>
+      <button id="ttsBtn" class="secondary">Generate Speech</button>
+
+      <div id="error" class="error"></div>
+
+      <div id="result" class="result rtl" style="display:none;"></div>
+
+      <audio id="audio" controls style="display:none;"></audio>
+    </div>
+  </div>
+
+  <script>
+    const scriptSelect = document.getElementById("script");
+    const inputText = document.getElementById("inputText");
+    const translateBtn = document.getElementById("translateBtn");
+    const ttsBtn = document.getElementById("ttsBtn");
+    const resultBox = document.getElementById("result");
+    const errorBox = document.getElementById("error");
+    const audio = document.getElementById("audio");
+
+    let latestTranslation = "";
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.style.display = "block";
+    }
+
+    function clearError() {
+      errorBox.textContent = "";
+      errorBox.style.display = "none";
+    }
+
+    function setLoading(button, isLoading, text) {
+      button.disabled = isLoading;
+      button.textContent = isLoading ? "Please wait..." : text;
+    }
+
+    scriptSelect.addEventListener("change", () => {
+      if (scriptSelect.value === "arabic") {
+        resultBox.classList.add("rtl");
+      } else {
+        resultBox.classList.remove("rtl");
+      }
+    });
+
+    translateBtn.addEventListener("click", async () => {
+      clearError();
+      audio.style.display = "none";
+      resultBox.style.display = "none";
+
+      const text = inputText.value.trim();
+      const script = scriptSelect.value;
+
+      if (!text) {
+        showError("Please enter English text first.");
+        return;
+      }
+
+      setLoading(translateBtn, true, "Translate");
+
+      try {
+        const response = await fetch("/api/translate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ text, script })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          throw new Error(data.details || data.error || "Translation failed.");
+        }
+
+        latestTranslation = data.translation;
+
+        resultBox.textContent = latestTranslation;
+        resultBox.style.display = "block";
+
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setLoading(translateBtn, false, "Translate");
+      }
+    });
+
+    ttsBtn.addEventListener("click", async () => {
+      clearError();
+      audio.style.display = "none";
+
+      const script = scriptSelect.value;
+      const text = latestTranslation || resultBox.textContent.trim();
+
+      if (!text) {
+        showError("Translate some text first, then generate speech.");
+        return;
+      }
+
+      setLoading(ttsBtn, true, "Generate Speech");
+
+      try {
+        const response = await fetch("/api/tts", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ text, script })
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.details || data?.error || "TTS failed.");
+        }
+
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+
+        audio.src = audioUrl;
+        audio.style.display = "block";
+        audio.play();
+
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setLoading(ttsBtn, false, "Generate Speech");
+      }
+    });
+  </script>
+</body>
+</html>
